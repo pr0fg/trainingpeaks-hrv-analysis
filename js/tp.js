@@ -4,9 +4,10 @@
 var tpGlobalChartData = {
   'date': [],
   'hrv': [],
+  'rhrv': [],
   'lower': [],
   'upper': [],
-  'tss': [],
+  'min': 1000
 }
 
 // ----------------------------------------------------------------------------------- //
@@ -34,8 +35,7 @@ function tpLogin() {
               $("#alert").addClass("alert-success");
               $("#alert").text('Connected! Parsing data...');
 
-              await tpGetData(tpUserId, 'metrics');
-              await tpGetData(tpUserId, 'workouts');
+              await tpGetData(tpUserId);
 
               $('.spinner').remove();
               drawHRVChart();
@@ -60,7 +60,7 @@ function tpLogin() {
 
 // ----------------------------------------------------------------------------------- //
 
-async function tpGetData(tpUserId, endpoint) {
+async function tpGetData(tpUserId) {
 
   return new Promise((resolve, reject) => {
 
@@ -70,8 +70,7 @@ async function tpGetData(tpUserId, endpoint) {
       if(this.readyState == 4) {
         if(this.status == 200) {
           var responseData = JSON.parse(this.responseText).reverse();
-          if(endpoint == 'metrics') { tpParseHRVData(responseData); }
-          if(endpoint == 'workouts') { calculateTSS(responseData); }
+          tpParseHRVData(responseData);
           resolve();
         }
         else {
@@ -86,15 +85,7 @@ async function tpGetData(tpUserId, endpoint) {
     var nowDate = new Date();
     var tpWorkoutEndDate = ( nowDate.getFullYear() + '-' + ('0' + (nowDate.getMonth()+1)).slice(-2) + '-' + ('0' + nowDate.getDate()).slice(-2));
 
-    switch(endpoint) {
-      case('metrics'):
-        xhr.open("GET", "https://tpapi.trainingpeaks.com/metrics/v2/athletes/" + tpUserId + "/timedmetrics/" + tpWorkoutStartDate + "/" + tpWorkoutEndDate, true);
-        break;
-      case('workouts'):
-        xhr.open("GET", "https://tpapi.trainingpeaks.com/fitness/v1/athletes/" + tpUserId + "/workouts/" + tpWorkoutStartDate + "/" + tpWorkoutEndDate, true);
-        break;
-    }
-
+    xhr.open("GET", "https://tpapi.trainingpeaks.com/metrics/v2/athletes/" + tpUserId + "/timedmetrics/" + tpWorkoutStartDate + "/" + tpWorkoutEndDate, true);
     xhr.withCredentials = true;
     xhr.send(); 
 
@@ -127,98 +118,76 @@ function tpParseHRVData(metricData) {
 
 function calculateHRV(data) {
 
+  var today = new Date();
+  today.setDate(today.getDate() + 1);
+  today.setHours(0, 0, 0);
+  today.setMilliseconds(0);
+
+  var tonight = new Date(today);
+  tonight.setHours(23, 59, 59);
+
+  var week = new Date(today);
+  week.setDate(today.getDate() - 7);
+
+  var month = new Date(today);
+  month.setMonth(today.getMonth() - 1);
+
   for(offset = 0; offset < 90; offset++) {
-
-    var endDate = new Date();
-    endDate.setDate(endDate.getDate() - offset);
-    endDate.setHours(0, 0, 0);
-    endDate.setMilliseconds(0);
-
-    var weekBack = new Date();
-    weekBack.setDate(weekBack.getDate() - 7 - offset);
-    weekBack.setHours(0, 0, 0);
-    weekBack.setMilliseconds(0);
-
-    var monthBack = new Date();
-    monthBack.setMonth(monthBack.getMonth() - 1);
-    monthBack.setDate(monthBack.getDate() - offset);
-    monthBack.setHours(0, 0, 0);
-    monthBack.setMilliseconds(0);
-
-    maskedData = getDataFromSet(data, monthBack, weekBack, endDate);
-    weekData = Object.values(maskedData[0]);
-    monthData = Object.values(maskedData[1]);
-
-    if(monthData.length < 10 | weekData.length < 3) { continue; }
     
+    today.setDate(today.getDate() - 1);
+    tonight.setDate(tonight.getDate() - 1);
+    week.setDate(week.getDate() - 1);
+    month.setDate(month.getDate() - 1);
+
+    maskedData = getDataFromSet(data, today, tonight, week, month);
+    todayData = maskedData[0];
+    weekData = Object.values(maskedData[1]);
+    monthData = Object.values(maskedData[2]);
+
+    if(!todayData | monthData.length < 10 | weekData.length < 3) { continue; }
+    
+    hrv = todayData;
     weekMean = math.mean(weekData);
     monthMean = math.mean(monthData);
     monthStd = math.std(monthData);
     lower = monthMean - (monthStd / 2);
     upper = monthMean + (monthStd / 2);
+    min = math.min(monthData);
 
-    tpGlobalChartData['date'].push(endDate.getMonth() + '/' + endDate.getDate());
-    tpGlobalChartData['hrv'].push(weekMean);
+    if(min < tpGlobalChartData['min']) { tpGlobalChartData['min'] = min; }
+
+    tpGlobalChartData['date'].push((today.getMonth() + 1) + '/' + today.getDate());
+    tpGlobalChartData['hrv'].push(hrv);
+    tpGlobalChartData['rhrv'].push(weekMean);
     tpGlobalChartData['lower'].push(lower);
     tpGlobalChartData['upper'].push(upper);
   }
 }
 
-
 // ----------------------------------------------------------------------------------- //
 
-function calculateTSS(data) {
+function getDataFromSet(data, today, tonight, week, month) {
 
-  for(offset = 0; offset < 90; offset++) {
-
-    var endDate = new Date();
-    endDate.setDate(endDate.getDate() - offset);
-    endDate.setHours(0, 0, 0);
-    endDate.setMilliseconds(0);
-
-    var weekBack = new Date();
-    weekBack.setDate(weekBack.getDate() - 7 - offset);
-    weekBack.setHours(0, 0, 0);
-    weekBack.setMilliseconds(0);
-
-    tss = getTSSFromSet(data, weekBack, endDate);
-    tpGlobalChartData['tss'].push(tss);
-
-  }
-}
-
-// ----------------------------------------------------------------------------------- //
-
-function getDataFromSet(data, monthBack, weekBack, endDate) {
-
+  var todayData = null;
   var weekData = {};
   var monthData = {};
 
   for(const [key, value] of Object.entries(data)) {
+    
     date = new Date(key);
-    if(date >= weekBack & date < endDate) {
+
+    if(date >= today & date <= tonight) {
+      todayData = value;
+    }
+    if(date >= week & date < today) {
       weekData[date] = value;
     }
-    if(date >= monthBack & date < endDate) {
+    if(date >= month & date < today) {
       monthData[date] = value;
     }
   }
 
-  return [weekData, monthData];
+  return [todayData, weekData, monthData];
 }
 
 // ----------------------------------------------------------------------------------- //
-
-function getTSSFromSet(data, weekBack, endDate) {
-
-  var tss = 0;
-
-  for(i = 0; i < data.length; i++) {
-    date = new Date(data[i].workoutDay);
-    if(date >= weekBack & date < endDate) {
-      tss += data[i].tssActual;
-    }
-  }
-
-  return tss;
-}
