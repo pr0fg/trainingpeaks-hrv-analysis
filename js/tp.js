@@ -48,7 +48,7 @@ function tpLogin() {
         $("#alert").removeClass("alert-warning");
         $("#alert").addClass("alert-danger");
         $("#alert").text('Could not connect to TrainingPeaks. Are you logged in?');
-        throw new Error('Could not connect to TrainingPeaks. Are you logged in?');
+        throw new Error('Could not connect to TrainingPeaks. Are you logged in? Try opening TrainingPeaks in a new tab.');
       }
     }
   };
