@@ -38,8 +38,8 @@ function tpLogin() {
               await tpGetData(tpUserId);
 
               $('.spinner').remove();
+              generateHRVAlert();
               drawHRVChart();
-              $('#alert').alert('close');
             }
           }
         }
@@ -188,6 +188,26 @@ function getDataFromSet(data, today, tonight, week, month) {
   }
 
   return [todayData, weekData, monthData];
+}
+
+// ----------------------------------------------------------------------------------- //
+
+function generateHRVAlert() {
+
+  $("#alert").removeClass("alert-success");
+
+  if(tpGlobalChartData['rhrv'][0] >= tpGlobalChartData['upper'][0]) {
+    $("#alert").addClass("alert-success");
+    $("#alert").text("Positive HRV trend detected. Today's a good day for a hard workout!");
+  }
+  else if(tpGlobalChartData['rhrv'][0] <= tpGlobalChartData['lower'][0]) {
+    $("#alert").addClass("alert-danger");
+    $("#alert").text("Low HRV trend detected. Today should be a rest day.");
+  }
+  else {
+    $("#alert").addClass("alert-primary");
+    $("#alert").text("Normal HRV trend detected. Proceed with your normal workout.");
+  }
 }
 
 // ----------------------------------------------------------------------------------- //
