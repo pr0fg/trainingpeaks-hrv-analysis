@@ -127,12 +127,12 @@ function calculateHRV(data) {
   tonight.setHours(23, 59, 59);
 
   var week = new Date(today);
-  week.setDate(today.getDate() - 7);
+  week.setDate(today.getDate() - 6);
 
   var month = new Date(today);
   month.setMonth(today.getMonth() - 1);
 
-  for(offset = 0; offset < 90; offset++) {
+  for(offset = 0; offset < 30; offset++) {
     
     today.setDate(today.getDate() - 1);
     tonight.setDate(tonight.getDate() - 1);
@@ -179,10 +179,10 @@ function getDataFromSet(data, today, tonight, week, month) {
     if(date >= today & date <= tonight) {
       todayData = value;
     }
-    if(date >= week & date < today) {
+    if(date >= week & date < tonight) {
       weekData[date] = value;
     }
-    if(date >= month & date < today) {
+    if(date >= month & date < tonight) {
       monthData[date] = value;
     }
   }
